@@ -47,12 +47,30 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "avatars.githubusercontent.com", pathname: "/**" },
     ],
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js", ".jsx"],
       ".mjs": [".mts", ".mjs"],
       ".cjs": [".cts", ".cjs"],
     };
+
+    // mermaid (and dagre-d3-es / lodash-es) is only ever imported inside a
+    // client-side dynamic import() inside a useEffect, so it must never be
+    // bundled into the server build.  Marking it external for the server pass
+    // avoids the lodash-es named-export errors that come from webpack trying
+    // to statically analyse the ESM barrel at build time.
+    if (isServer) {
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : []),
+        ({ request }: { request?: string }, callback: (err?: Error | null, result?: string) => void) => {
+          if (request && (request === "mermaid" || request.startsWith("mermaid/"))) {
+            return callback(null, `commonjs ${request}`);
+          }
+          callback();
+        },
+      ];
+    }
+
     return config;
   },
 };
